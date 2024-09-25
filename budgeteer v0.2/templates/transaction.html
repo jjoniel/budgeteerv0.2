@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+    <head>
+
+        <title>add transaction</title>
+
+        <!-- jquery -->
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+        <!-- delete icon -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+        
+        <!-- fonts -->
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,100;9..40,200;9..40,400&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@500&display=swap" rel="stylesheet">
+        
+        <!-- own css -->
+        <link rel="stylesheet" href="/static/transaction.css">
+
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+        <meta name="theme-color" content="#EAE151">
+
+    </head>
+    <body>
+        
+        <div class="page-header"><span id="logo">budgeteer</span></div>
+
+        <div class="page-body">
+            <br>
+            <br>
+            <h1>Add Trans<span class="popout">action</span></h1>
+            
+            <form autocomplete="off" id="transaction-form" action="/add_transaction" method="POST">
+                <div class="transaction-header">
+                    <div>
+                        <div class="autocomplete">
+                            <input enterkeyhint="enter" type="text" id="merchant" name="merchant" placeholder="merchant name"/>
+                        </div>  
+                    </div>
+                    <div>
+                        <input enterkeyhint="enter" type="date" id="date" name="date" value="{{ today }}">
+                    </div>
+                </div>
+                <br>
+
+                <div id="mode1">
+                    <table id="transaction-table" class="table-scroll">
+                        <thead>
+                            <tr>
+                                <th style="width:37%">Product</th>
+                                <th style="width:37%">Category</th>
+                                <th style="width:15%">Price</th>
+                                <th class="remove-holder" style="width:4%"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="swipe">
+                                <td>
+                                    <div class="autocomplete">
+                                        <input enterkeyhint="enter"type="text" class="product-name" name="product_name[]" placeholder="product"/>
+                                    </div>        
+                                <td>
+                                    <div class="autocomplete">
+                                        <input enterkeyhint="enter" type="text" class="cat" name="cat[]" placeholder="category"/>
+                                    </div>
+                                </td>
+                                <td class="remove-adjacent">
+                                    <input enterkeyhint="enter" type="number" class="total-price" name="total_price[]" step=".01" placeholder="0.00">
+                                </td>
+                                <td class="remove-holder">
+                                    <button class="remove">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot id="total-section">
+                            <tr style="padding:0;">
+                                <td colspan="4" style="padding:0;">
+                                    <hr class="add-row-btn">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td colspan="2" style="text-align: right;"><strong>Product Count:</strong></td>
+                                <td><span id="total-items">0</span></td>
+                            </tr>
+                            <tr>
+                                <td colspan="2" style="text-align: right;"><strong>Total:</strong></td>
+                                <td><span id="total-amount">0.00</span></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <div id="mode2" style="display:none">
+                
+                </div>
+                
+                <br><br>
+                
+                <div>
+                    <input style="margin:0 3%;" type="submit" value="add row" id="add-row-btn">
+                    <input style="display:inline-block;" type="submit" value="submit" id="submit">
+                </div>
+            </form>
+        </div>
+
+        <div id="customModal">
+            <div class="modal-content">
+                <p>delete row?</p>
+                <div class="modal-buttons">
+                    <button onclick="closeModal()">cancel</button>
+                    <button id="modalConfirm" onclick="confirmDelete()" class="submit-ready">proceed</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="customModal2">
+            <div class="modal-content">
+                <p>incomplete fields!</p>
+                <div class="modal-buttons">
+                    <button onclick="closeModal2()" class="submit-ready">okay</button>
+                </div>
+            </div>
+        </div>
+        <script>
+            $(document).ready(function() {
+                // create data stuctures from templating
+                var existingProductNames = {{ existing_product_names | tojson}};
+                var categories = {{ categories | tojson}};
+                var productCatsMap = {{ cats_map | tojson}};
+
+                // first row listeners
+                $('.product-name').on('input', updateCat);
+                $('.product-name').on('change', updateCat);
+                $('.product-name').on('blur', updateCat);
+                $('.total-price').on('blur', formatTotal);
+                $(document).on('input', '.total-price', updateTotal);
+                $(document).on('input', function() {
+                    let isValid = true;
+                    $(this).find('input[type="text"], input[type="number"], select').each(function() {
+                        if ($(this).val().trim() === '') {
+                            isValid = false;
+                            document.getElementById('submit').classList.remove('submit-ready');
+                            return false;
+                        }
+                    });
+                    if (isValid) {
+                        console.log('here');
+                        document.getElementById('submit').classList.add('submit-ready');
+                    }
+                });
+
+                // initial totaling
+                updateTotal();
+
+                // adding a new row
+                $('.add-row-btn').on('click', function() {
+                    $('#transaction-table tbody').append(
+                        `<tr class="swipe">
+                            <td>
+                                <div class="autocomplete">
+                                    <input enterkeyhint="enter" type="text" class="product-name" name="product_name[]" placeholder="product"/>
+                                </div>        
+                            <td>
+                                <div class="autocomplete">
+                                    <input enterkeyhint="enter" type="text" class="cat" name="cat[]" placeholder="category"/>
+                                </div>
+                            </td>
+                            <td class="remove-adjacent">
+                                <input enterkeyhint="enter" type="number" class="total-price" name="total_price[]" step=".01" placeholder="0.00">
+                            </td>
+                            <td class="remove-holder">
+                                <button class="remove">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </td>
+                        </tr>`
+                    );
+
+                    $('#transaction-table tbody tr:last-child').addClass('slide-in');
+
+                    // listeners
+                    $('.product-name').off('input').on('input', updateCat);
+                    $('.product-name').off('change').on('change', updateCat);
+                    $('.product-name').off('blur').on('blur', updateCat);
+                    $('.total-price').on('blur', formatTotal);
+
+                    // auto completion
+                    var productElements = document.getElementsByClassName("product-name");
+                    for (var i = 0; i < productElements.length; i++) {
+                        autocomplete(productElements[i], existingProductNames);
+                    }
+                    var catElements = document.getElementsByClassName("cat");
+                    for (var i = 0; i < catElements.length; i++) {
+                        autocomplete(catElements[i], categories);
+                    }
+
+                    // retotal
+                    updateTotal();
+                });
+
+                $("#add-row-btn").on('click', function() {
+                    event.preventDefault();
+                    $(".add-row-btn").trigger('click');
+                });
+
+                // inital auto completion
+                autocomplete(document.getElementById("merchant"), {{ merchants | tojson}});
+                autocomplete(document.getElementsByClassName("product-name")[0], existingProductNames);
+                autocomplete(document.getElementsByClassName("cat")[0], categories);
+
+                // updates categories based on product value
+                function updateCat() {
+                    var productName = $(this).val().toUpperCase();
+                    var catSelect = $(this).closest('tr').find('.cat');
+                    if (productCatsMap.hasOwnProperty(productName)) {
+                        catSelect.val(productCatsMap[productName]);
+                    } else {
+                        catSelect.val(catSelect.val());
+                    }
+                }
+
+                function formatTotal() {
+                    var tot = $(this);
+                    var val = parseFloat(tot.val())
+                    tot.val(`${val.toFixed(2)}`);
+                }
+
+                $("#modeToggle").on('change', function() {
+                    if($(this).is(":checked")) {
+                        console.log('here!');
+                        $("#mode1").show();
+                        $("#mode2").hide();
+                    }
+                    else {
+                        $("#mode1").hide();
+                        $("#mode2").show();
+                    }
+                });
+
+                $("h1").on('swipe', function() {
+                    $(this).closest('.popout').css("color", "purple");
+                })
+            });
+        </script>
+        <script src="/static/transaction.js"></script>
+        <script src="/static/autocomplete.js"></script>
+    </body>
+</html>
